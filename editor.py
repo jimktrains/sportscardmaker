@@ -16,6 +16,27 @@ WIDTH_IDX = 0
 def is_image(filename):
     return os.path.isfile(filename) and filename.lower().endswith(".jpg")
 
+def sortfileskey(x):
+    jnum = x[1][1]['Jersey Number'] or ""
+    if len(jnum) == 1:
+        if jnum.isdigit():
+            jnum = f"0{jnum}"
+        elif jnum == "T":
+            jnum = "ZZT"
+        else:
+            jnum = f"{jnum} "
+    k = 0
+    if x[1][1]['Kind'] == 'Head':
+        k = 1
+    elif x[1][1]['Kind'] == 'Batting':
+        k = 2
+    elif x[1][1]['Kind'] == 'Fielding':
+        k = 3
+    elif x[1][1]['Kind'] != '' and x[1][1]['Kind'] is not None:
+        k = 4
+    jnum = f"{jnum}-{k}"
+    return jnum
+
 class RosterEntry:
     def __init__(self, row):
         self.jersey_number = row['Jersey Number'] or None
@@ -131,6 +152,9 @@ class MainWindow:
 
         self.not_in_output_label = Label(self.info_frame, text="")
         self.not_in_output_label.pack(side=TOP)
+
+        self.kind_label = Label(self.info_frame, text="")
+        self.kind_label.pack(side=TOP)
 
         self.img_frame = Frame(self.root)
         self.img_frame.pack(side=RIGHT)
@@ -264,6 +288,9 @@ class MainWindow:
             if 'Blurb' not in self.image_meta[first_key]:
                 for k in self.image_meta:
                     self.image_meta[k]['Blurb'] = None
+            if 'Kind' not in self.image_meta[first_key]:
+                for k in self.image_meta:
+                    self.image_meta[k]['Kind'] = None
         for filename in self.images:
             if filename not in self.image_meta:
                 self.image_meta[filename] = {
@@ -274,20 +301,18 @@ class MainWindow:
                     'Scale': 1,
                     'Orientation': 'v',
                     'Not in Output': 'f',
+                    'Kind': None,
                     'Blurb': None,
                 }
         for k in self.image_meta:
-            print(self.image_meta[k])
-            if self.image_meta[k]['Jersey Number'] == '':
-                self.image_meta[k]['Jersey Number'] = None
-            if self.image_meta[k]['X Offset'] == '':
-                self.image_meta[k]['X Offset'] = None
-            if self.image_meta[k]['Y Offset'] == '':
-                self.image_meta[k]['Y Offset'] = None
-            if self.image_meta[k]['Not in Output'] == '':
-                self.image_meta[k]['Not in Output'] = 'f' 
-            if self.image_meta[k]['Blurb'] == '':
-                self.image_meta[k]['Blurb'] = None 
+            self.image_meta[k]['Jersey Number'] = self.image_meta[k]['Jersey Number'] or None
+            self.image_meta[k]['X Offset'] = self.image_meta[k]['X Offset'] or None
+            self.image_meta[k]['Y Offset'] = self.image_meta[k]['Y Offset'] or None
+            self.image_meta[k]['Not in Output'] = self.image_meta[k]['Not in Output'] or 'f' 
+            self.image_meta[k]['Blurb'] = self.image_meta[k]['Blurb'] or None 
+            self.image_meta[k]['Kind'] = self.image_meta[k]['Kind'] or None 
+        files = sorted(enumerate(self.image_meta.items()), key=sortfileskey)
+        self.image_meta = {x[1][0]:x[1][1] for x in files}
 
     def get_blurb(self):
         if self.jnum not in self.roster:
@@ -303,15 +328,16 @@ class MainWindow:
         count = 0
 
         for (jnum, r) in self.roster.items():
-            counts[jnum]={'v': 0,
-                          'h': 0,
+            counts[jnum]={'Head': 0,
+                          'Batting': 0,
+                          'Fielding': 0,
                           't': 0,
                           }
             for (k,v) in self.image_meta.items():
                 if v['Not in Output'] != 'f':
                     continue
                 if v['Jersey Number'] == jnum:
-                    counts[jnum][v['Orientation']] += 1
+                    counts[jnum][v['Kind']] += 1
                     counts[jnum]['t'] += 1
                     count += 1
 
@@ -330,7 +356,7 @@ class MainWindow:
         for (jnum, v) in self.roster.items():
             fname = v['First Name'].ljust(longest_fname)
             lname = v['Last Name'].ljust(longest_lname)
-            print(f"{jnum:2} | {fname} | {lname} | {counts[jnum]['v']} | {counts[jnum]['h']} | {counts[jnum]['t']}")
+            print(f"{jnum:2} | {fname} | {lname} | {counts[jnum]['Head']} | {counts[jnum]['Batting']} | {counts[jnum]['Fielding']}  | {counts[jnum]['t']}")
         print(f"{count=}")
 
     def load_img(self, filename, show_table=True):
@@ -349,6 +375,8 @@ class MainWindow:
         i = list(self.image_meta.keys()).index(self.current_file)
         self.index_label.config(text=f"{i}/{len(self.image_meta)-1}")
         print(f"loading {self.current_file} {i}/{len(self.image_meta)-1}")
+
+        self.kind_label.config(text=f"{imeta['Kind']}")
 
         #print(f"{imeta=}")
         if imeta['Jersey Number'] is not None and imeta['Jersey Number'] not in self.roster:
@@ -415,7 +443,7 @@ class MainWindow:
                 self.canvas.config(width=self.cwidth, height=self.cheight)
                 self.template_overlay = self.horizontal_template.resize((int(self.bleed_width * self.print_dpi), int(self.bleed_height * self.print_dpi)))
 
-    def draw_img(self):
+    def draw_img(self, draw_borders=True):
         self.set_orientation()
 
         sw = self.safe_width * self.print_dpi
@@ -546,6 +574,7 @@ class MainWindow:
                                 blurb.append(np)
                                 if len(np) > longest_np_len:
                                     longest_np_len = len(np)
+                        print("\n".join(blurb))
                         blurb2 = []
                         for i in range(0,len(blurb),2):
                             t = ""
@@ -635,48 +664,41 @@ class MainWindow:
                         min_x = x
                     self.back_dimg.text((x,900 - ((len(wrapped_joke_lines)-i+0.5)*self.stats_pt)), line, fill=text_color, font=self.font_stats)
 
-        self.dimg.text((0, 0), "Bleed area", font=self.font_stats)
+        if draw_borders:
+            self.dimg.text((0, 0), "Bleed area", font=self.font_stats)
 
-        self.dimg.rectangle((cwo_x, cwo_y, self.bleed_width * self.print_dpi - cwo_x, self.bleed_height * self.print_dpi - cwo_y), outline=(0,0,0), fill=None)
-        self.dimg.text((cwo_x, cwo_y), "Cut line", font=self.font_stats)
+            self.dimg.rectangle((cwo_x, cwo_y, self.bleed_width * self.print_dpi - cwo_x, self.bleed_height * self.print_dpi - cwo_y), outline=(0,0,0), fill=None)
+            self.dimg.text((cwo_x, cwo_y), "Cut line", font=self.font_stats)
 
-        self.dimg.rectangle((swo_x, swo_y, self.bleed_width * self.print_dpi - swo_x, self.bleed_height * self.print_dpi - swo_y), outline=(0,0,0), fill=None)
-        self.dimg.text((swo_x, swo_y), "Safe line", font=self.font_stats)
-        self.dimg.text((swo_x, swo_y+30), "Draft", font=self.font_2stats)
+            self.dimg.rectangle((swo_x, swo_y, self.bleed_width * self.print_dpi - swo_x, self.bleed_height * self.print_dpi - swo_y), outline=(0,0,0), fill=None)
+            self.dimg.text((swo_x, swo_y), "Safe line", font=self.font_stats)
+            self.dimg.text((swo_x, swo_y+30), "Draft", font=self.font_2stats)
 
-        self.back_dimg.text((0, 0), "Bleed area", font=self.font_stats, fill='black')
+            self.back_dimg.text((0, 0), "Bleed area", font=self.font_stats, fill='black')
 
-        self.back_dimg.rectangle((back_swo_x, back_swo_y, self.back_bleed_width * self.print_dpi - swo_x, self.back_bleed_height * self.print_dpi - swo_y), outline=(0,0,0), fill=None)
-        self.back_dimg.text((back_cwo_x, back_cwo_y), "Cut line", font=self.font_stats, fill='black')
+            self.back_dimg.rectangle((back_swo_x, back_swo_y, self.back_bleed_width * self.print_dpi - swo_x, self.back_bleed_height * self.print_dpi - swo_y), outline=(0,0,0), fill=None)
+            self.back_dimg.text((back_cwo_x, back_cwo_y), "Cut line", font=self.font_stats, fill='black')
 
-        self.back_dimg.text((back_swo_x, back_swo_y), "Safe line", font=self.font_stats, fill='black')
-        self.back_dimg.rectangle((cwo_x, cwo_y, self.back_bleed_width * self.print_dpi - cwo_x, self.back_bleed_height * self.print_dpi - cwo_y), outline=(0,0,0), fill=None)
-        self.back_dimg.text((back_swo_x, back_swo_y+30), "Draft", font=self.font_2stats, fill='black')
+            self.back_dimg.text((back_swo_x, back_swo_y), "Safe line", font=self.font_stats, fill='black')
+            self.back_dimg.rectangle((cwo_x, cwo_y, self.back_bleed_width * self.print_dpi - cwo_x, self.back_bleed_height * self.print_dpi - cwo_y), outline=(0,0,0), fill=None)
+            self.back_dimg.text((back_swo_x, back_swo_y+30), "Draft", font=self.font_2stats, fill='black')
 
+        (fw,fh) = self.img.size
+        (bw,bh) = self.back_img.size
+        maxh = max(fh,bh)
 
-        idx = list(self.image_meta.keys()).index(self.current_file)
-        if self.jnum is not None:
-            meta = self.image_meta[self.current_file]
-            if meta['Not in Output'] == 'f':
-                (fw,fh) = self.img.size
-                (bw,bh) = self.back_img.size
-                maxh = max(fh,bh)
-                
-                fbimg = Image.new('RGB', (fw+bw+5, max(fh,bh)))
-                fbimg.paste(self.img, (0, (maxh - fh) // 2 ))
-                fbimg.paste(self.back_img, (fw+5, (maxh - bh) // 2 ))
+        self.fbimg = Image.new('RGBA', (fw+bw+5, max(fh,bh)))
+        self.fbimg.paste(self.img.convert('RGBA'), (0, (maxh - fh) // 2 ))
+        self.fbimg.paste(self.back_img.convert('RGBA'), (fw+5, (maxh - bh) // 2 ))
 
-                fbimg.convert('RGB').save('output/' + f"{self.jnum}_{idx:02}_front_back.png")
-                self.back_img.convert('RGB').save('output/' + f"{self.jnum}_{idx:02}_back.png")
-                self.img.save('output/' + f"{self.jnum}_{idx:02}_front.png")
+        if draw_borders:
+            resized_img = self.img.resize((self.cwidth, self.cheight))
+            resized_back_img = self.back_img.resize((self.back_cwidth, self.back_cheight))
 
-        self.img = self.img.resize((self.cwidth, self.cheight))
-        self.back_img = self.back_img.resize((self.back_cwidth, self.back_cheight))
-
-        self.pimg = ImageTk.PhotoImage(self.img)
-        self.back_pimg = ImageTk.PhotoImage(self.back_img)
-        self.canvas.itemconfig(self.cimg, image=self.pimg)
-        self.back_canvas.itemconfig(self.back_cimg, image=self.back_pimg)
+            self.pimg = ImageTk.PhotoImage(resized_img)
+            self.back_pimg = ImageTk.PhotoImage(resized_back_img)
+            self.canvas.itemconfig(self.cimg, image=self.pimg)
+            self.back_canvas.itemconfig(self.back_cimg, image=self.back_pimg)
 
     def write_index(self):
         index_filename = "output/index.html"
@@ -696,8 +718,9 @@ class MainWindow:
             f.write("    <th>Jersey Number</th>\n")
             f.write("    <th>First Name</th>\n")
             f.write("    <th>Last Name</th>\n")
-            f.write("    <th>Vertical</th>\n")
-            f.write("    <th>Horizontal</th>\n")
+            f.write("    <th>Portrait</th>\n")
+            f.write("    <th>Batting</th>\n")
+            f.write("    <th>Fielding</th>\n")
             f.write("    <th>Total</th>\n")
             f.write("  </tr>\n")
             f.write("  </thead>\n")
@@ -711,8 +734,9 @@ class MainWindow:
                 f.write(f"      <td><a href=\"#jnum_{jnum}\">{jnum}</a></td>\n")
                 f.write(f"      <td><a href=\"#jnum_{jnum}\">{fname}</a></td>\n")
                 f.write(f"      <td><a href=\"#jnum_{jnum}\">{lname}</a></td>\n")
-                f.write(f"      <td>{counts[jnum]['v']}</td>\n")
-                f.write(f"      <td>{counts[jnum]['h']}</td>\n")
+                f.write(f"      <td>{counts[jnum]['Head']}</td>\n")
+                f.write(f"      <td>{counts[jnum]['Batting']}</td>\n")
+                f.write(f"      <td>{counts[jnum]['Fielding']}</td>\n")
                 f.write(f"      <td>{counts[jnum]['t']}</td>\n")
                 f.write("    </tr>\n")
 
@@ -727,19 +751,7 @@ class MainWindow:
 
             f.write("</table>\n")
 
-            files = [x for x in enumerate(self.image_meta.items())]
-            def sortfileskey(x):
-                jnum = x[1][1]['Jersey Number']
-                if jnum is not None:
-                    if len(jnum) == 1:
-                        if jnum.isdigit():
-                            jnum = f"0{jnum}"
-                        else:
-                            jnum = f"{jnum}A"
-                    return jnum
-                return ""
-
-            files=sorted(files, key=sortfileskey)
+            files = sorted(enumerate(self.image_meta.items()), key=sortfileskey)
             byjersey = {}
             for (i, (iname, meta)) in files:
                 jnum = meta['Jersey Number']
@@ -755,7 +767,7 @@ class MainWindow:
                     # print(f"{jnum=} {i=} {biname=}")
                     meta = self.image_meta[biname]
                     if meta['Not in Output'] == 'f':
-                        iname = f"{meta['Jersey Number']}_{i:02}_front_back.png"
+                        iname = f"{i:02}_{meta['Jersey Number']}_front_back.png"
                         f.write(f"<small>{i} {biname} {meta['Jersey Number']}</small>")
                         f.write(f"<a href=\"{iname}\">")
                         f.write(f"<img src=\"{iname}\">")
@@ -767,35 +779,57 @@ class MainWindow:
         shutil.move(tmp_index_filename, index_filename)
 
     def quit(self):
-        self.save()
+        self.save_meta()
+        self.save_img()
+        self.write_index()
         sys.exit(0)
 
-    def save(self):
+    def save_img(self):
+        if self.jnum is not None:
+            idx = list(self.image_meta.keys()).index(self.current_file)
+            idjn = f"{idx:02}_{self.jnum}"
+            meta = self.image_meta[self.current_file]
+            if meta['Not in Output'] == 'f':
+                self.draw_img(True)
+                prefix = f"output"
+                self.fbimg.convert('RGBA').save(f"{prefix}/{idjn}_front_back.png")
+                self.back_img.convert('RGB').save(f"{prefix}/{idjn}_back.png")
+                self.img.save(f"{prefix}/{idjn}_front.png")
+
+                self.draw_img(False)
+                prefix = f"output/final"
+                self.back_img.convert('RGB').save(f"{prefix}/back/{idjn}.png")
+                self.img.save(f"{prefix}/front/{idjn}.png")
+
+    def save_meta(self):
         if len(self.image_meta) <= 0:
             return
 
         self.image_meta[self.current_file] = {
             'Image': self.current_file,
             'Jersey Number': self.jnum,
+            'Kind': self.image_meta[self.current_file]['Kind'],
             'X Offset': self.offset_x,
             'Y Offset': self.offset_y,
             'Scale': self.scale,
             'Orientation': self.orientation,
             'Not in Output': self.image_meta[self.current_file]['Not in Output'],
-            'Blurb': self.image_meta[self.current_file]['Blurb']
+            'Blurb': self.image_meta[self.current_file]['Blurb'],
         }
 
         images_csv_filename = 'input/images.csv'
         tmp_images_csv_filename = f"{images_csv_filename}~"
+
+        files = sorted(enumerate(self.image_meta.items()), key=sortfileskey)
+        imeta = {x[1][0]:x[1][1] for x in files}
         with open(tmp_images_csv_filename, 'w') as csvfile:
-            first_key = list(self.image_meta.keys())[0]
-            fieldnames = self.image_meta[first_key].keys()
+            first_key = list(imeta.keys())[0]
+            fieldnames = imeta[first_key].keys()
             writer = DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
-            for v in self.image_meta.values():
+            for v in imeta.values():
                 writer.writerow(v)
         shutil.move(tmp_images_csv_filename, images_csv_filename)
-        self.write_index()
 
     def keypress_handler(self, event):
         #print(f"keypress {event.char=} {event.keysym=} {event.keycode=}")
@@ -853,7 +887,9 @@ class MainWindow:
             self.offset_x = 0
             self.offset_y = 0
         elif event.keysym == 's':
-            self.save()
+            self.save_meta()
+            self.save_img()
+            self.write_index()
         elif event.keysym == 'N':
             self.cmd_box.delete("1.0", END)
             self.cmd_box.insert(END, self.last_cmd)
@@ -863,28 +899,43 @@ class MainWindow:
                 self.image_meta[self.current_file]['Not in Output'] = 't'
             else:
                 self.image_meta[self.current_file]['Not in Output'] = 'f'
+            self.save_meta()
             self.load_img(self.current_file)
         elif event.keysym == 'a':
             for (k,imeta) in self.image_meta.items():
                 if imeta['Not in Output'] != 't':
                     self.load_img(k, show_table=False)
-                    self.draw_img()
-            self.save()
+                    self.save_img()
+            self.save_meta()
+            self.write_index()
         elif event.keysym == 'Next':
-            self.save()
-            keys = list(self.image_meta.keys())
+            self.save_meta()
+            self.save_img()
             keys = list(self.image_meta.keys())
             cidx = keys.index(self.current_file)
             cidx += 1
             cidx %= len(keys)
             self.load_img(keys[cidx])
         elif event.keysym == 'Prior':
-            self.save()
+            self.save_meta()
+            self.save_img()
             keys = list(self.image_meta.keys())
             cidx = keys.index(self.current_file)
             cidx -= 1
             cidx %= len(keys)
             self.load_img(keys[cidx])
+        elif event.keysym == 'F1':
+            self.image_meta[self.current_file]['Kind'] = 'Head'
+            self.save_meta()
+            self.load_img(self.current_file)
+        elif event.keysym == 'F2':
+            self.image_meta[self.current_file]['Kind'] = 'Batting'
+            self.save_meta()
+            self.load_img(self.current_file)
+        elif event.keysym == 'F3':
+            self.image_meta[self.current_file]['Kind'] = 'Fielding'
+            self.save_meta()
+            self.load_img(self.current_file)
         elif event.keysym >= '0' and event.keysym <= '9':
             if self.jnum is None:
                 self.jnum = event.keysym
