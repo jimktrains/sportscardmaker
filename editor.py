@@ -574,7 +574,6 @@ class MainWindow:
                                 blurb.append(np)
                                 if len(np) > longest_np_len:
                                     longest_np_len = len(np)
-                        print("\n".join(blurb))
                         blurb2 = []
                         for i in range(0,len(blurb),2):
                             t = ""
