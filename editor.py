@@ -13,9 +13,50 @@ import shutil
 HEIGHT_IDX = 1
 WIDTH_IDX = 0
 
-
 def is_image(filename):
     return os.path.isfile(filename) and filename.lower().endswith(".jpg")
+
+class RosterEntry:
+    def __init__(self, row):
+        self.jersey_number = row['Jersey Number'] or None
+        self.first_name = row['First Name'] or None
+        self.last_name = row['Last Name'] or None
+        self.rookie = row['Rookie'] == 't'
+        self.position = row['Position'] or None
+        self.school = row['School'] or None
+        self.height = row['Height'] or None
+        self.throws = row['Throws'] or None
+        self.bats = row['Bats'] or None
+        self.walk_up_song = row['Walk Up Song'] or None
+        self.walk_up_artist = row['Walk Up Artist'] or None
+        self.blurb = row['Blurb'] or None
+
+class Picture:
+    def __init__(self, filename_or_row):
+        if type(filename_or_row) == dict:
+            r = filename_or_row
+            self.image = r['Image']
+            self.jersey_number = r['Jersey Number'] or None
+            self.x_offset = r['X Offset'] or 0.0
+            self.y_offset = r['Y Offset'] or 0.0
+            self.scale = r['Scale'] or 1.0
+            self.orientation = r['Orientation'] or 'v'
+            self.not_in_output = r['Not in Output'] == 't'
+            self.blurb = r['Blurb'] or None
+        else:
+            self.image = filename
+            self.jersey_number = None
+            self.x_offset = None
+            self.y_offset = None
+            self.scale = 1
+            self.orientation = 'v'
+            self.not_in_output = False
+            self.blurb = None
+
+    @staticmethod
+    def is_image(filename):
+        return os.path.isfile(filename) and filename.lower().endswith(".jpg")
+
 
 class MainWindow:
     def __init__(self):
