@@ -8,6 +8,7 @@ import os
 import sys
 import textwrap
 import subprocess
+import shutil
 
 HEIGHT_IDX = 1
 WIDTH_IDX = 0
@@ -636,7 +637,9 @@ class MainWindow:
         self.back_canvas.itemconfig(self.back_cimg, image=self.back_pimg)
 
     def write_index(self):
-        with open("output/index.html", "w+") as f:
+        index_filename = "output/index.html"
+        tmp_index_filename = f"{index_filename}~"
+        with open(tmp_index_filename, "w+") as f:
             f.write("<html>\n")
             f.write("<head>\n")
             f.write("<style>\n")
@@ -719,6 +722,7 @@ class MainWindow:
 
             f.write("</body>\n")
             f.write("</html>")
+        shutil.move(tmp_index_filename, index_filename)
 
     def quit(self):
         self.save()
@@ -739,13 +743,16 @@ class MainWindow:
             'Blurb': self.image_meta[self.current_file]['Blurb']
         }
 
-        with open('input/images.csv', 'w') as csvfile:
+        images_csv_filename = 'input/images.csv'
+        tmp_images_csv_filename = f"{images_csv_filename}~"
+        with open(tmp_images_csv_filename, 'w') as csvfile:
             first_key = list(self.image_meta.keys())[0]
             fieldnames = self.image_meta[first_key].keys()
             writer = DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for v in self.image_meta.values():
                 writer.writerow(v)
+        shutil.move(tmp_images_csv_filename, images_csv_filename)
         self.write_index()
 
     def keypress_handler(self, event):
