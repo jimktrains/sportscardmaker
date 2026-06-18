@@ -218,6 +218,9 @@ class MainWindow:
             if 'Not in Output' not in self.image_meta[first_key]:
                 for k in self.image_meta:
                     self.image_meta[k]['Not in Output'] = 'f'
+            if 'Blurb' not in self.image_meta[first_key]:
+                for k in self.image_meta:
+                    self.image_meta[k]['Blurb'] = None
         for filename in self.images:
             if filename not in self.image_meta:
                 self.image_meta[filename] = {
@@ -228,6 +231,7 @@ class MainWindow:
                     'Scale': 1,
                     'Orientation': 'v',
                     'Not in Output': 'f',
+                    'Blurb': None,
                 }
         for k in self.image_meta:
             print(self.image_meta[k])
@@ -239,6 +243,17 @@ class MainWindow:
                 self.image_meta[k]['Y Offset'] = None
             if self.image_meta[k]['Not in Output'] == '':
                 self.image_meta[k]['Not in Output'] = 'f' 
+            if self.image_meta[k]['Blurb'] == '':
+                self.image_meta[k]['Blurb'] = None 
+
+    def get_blurb(self):
+        if self.jnum not in self.roster:
+            return None
+        r = self.roster[self.jnum]
+        blurb = r['Blurb']
+        if self.image_meta[self.current_file]['Blurb'] is not None:
+            blurb = self.image_meta[self.current_file]['Blurb']
+        return blurb
 
     def count_table(self):
         counts = {}
@@ -310,6 +325,8 @@ class MainWindow:
         self.set_orientation()
 
         aspr = self.oimg.size[WIDTH_IDX] / self.oimg.size[HEIGHT_IDX]
+        self.height = self.oimg.size[HEIGHT_IDX]
+        self.width = self.oimg.size[WIDTH_IDX]
 
         if aspr > self.aspect_ratio:
             self.width = int(float(self.oimg.size[HEIGHT_IDX] * self.aspect_ratio))
@@ -332,13 +349,6 @@ class MainWindow:
         self.jnum = imeta['Jersey Number']
 
         self.text_state = None
-
-        cropto = (
-                int(float(self.offset_x)), 
-                int(float(self.offset_y)),
-                int(float(self.offset_x + (self.scale * self.width))),
-                int(float(self.offset_y + (self.scale * self.height))),
-                )
 
     def set_orientation(self):
         if self.orientation == 'v':
@@ -409,6 +419,8 @@ class MainWindow:
             font = self.font_jnum
             ysize = self.jnum_pt
             lines = [self.jnum]
+            if self.jnum in ['T', 'T2']:
+                lines = []
 
             if self.jnum not in self.roster:
                 print(f"{self.jnum} not in roster")
@@ -455,14 +467,61 @@ class MainWindow:
                     self.back_dimg.text((582,205), f"Bats: {r['Bats']}", fill=(0,0,0), font=self.font_stats)
 
 
+                blurb = r['Blurb']
+                if self.image_meta[self.current_file]['Blurb'] is not None:
+                    blurb = self.image_meta[self.current_file]['Blurb']
+                blurb_font_path = self.config.get('default', 'blurb_font')
+                blurb_w_ratio = 1.75
+                if self.jnum == 'T' and self.image_meta[self.current_file]['Blurb'] is None:
+                    if blurb == '' or blurb is None:
+                        blurb = []
+                        longest_name_len = 0
+                        longest_p_len = 0
+                        for jn in self.roster:
+                            if jn not in ['T', 'A']:
+                                n = len(f"{self.roster[jn]['First Name']} {self.roster[jn]['Last Name']}")
+                                if n > longest_name_len:
+                                    longest_name_len = n
 
-                if r['Blurb'] != '' and r['Blurb'] is not None:
-                    for blurb_pt in range(self.blurb_pt, 14, -1):
-                        font_blurb = ImageFont.truetype(self.config.get('default', 'blurb_font'), blurb_pt)
+                                p = self.roster[jn]['Position']
+                                pn = len(jn)
+                                if p != "" and p is not None:
+                                    pn = len(p)
+                                if pn > longest_p_len:
+                                    longest_p_len = pn
+                        longest_np_len = 0
+                        for jn in self.roster:
+                            if jn not in ['T', 'A']:
+                                n = f"{self.roster[jn]['First Name']} {self.roster[jn]['Last Name']}".strip()
+                                n = n.ljust(longest_name_len)
+
+                                p = self.roster[jn]['Position']
+                                if p != "" and p is not None:
+                                    jn = p
+                                jn = jn.rjust(longest_p_len)
+                                np = f"{n} {jn}"
+                                blurb.append(np)
+                                if len(np) > longest_np_len:
+                                    longest_np_len = len(np)
+                        blurb2 = []
+                        for i in range(0,len(blurb),2):
+                            t = ""
+                            if i + 1 != len(blurb):
+                                t = f" | {blurb[i + 1]}"
+                            t = t.rjust(longest_np_len)
+                            o = blurb[i].ljust(longest_np_len)
+                            blurb2.append(f"{o}{t}")
+                        blurb = "\n".join(blurb2)
+                        blurb_font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'
+                        blurb_w_ratio = 0.9
+
+                if blurb != '' and blurb is not None:
+                    for blurb_pt in range(self.blurb_pt, 8, -1):
+                        font_blurb = ImageFont.truetype(blurb_font_path, blurb_pt)
                         W_width = self.dimg.textlength("W", font=font_blurb)
-                        max_line_len = self.back_bleed_width*self.print_dpi // W_width * 1.5
+                        max_line_len = self.back_safe_width * self.print_dpi // W_width * blurb_w_ratio
 
-                        blurb_lines = r['Blurb'].split("\n")
+                        blurb_lines = blurb.split("\n")
                         line_idx = 0
                         wrapped_lines = []
                         for line in blurb_lines:
@@ -471,7 +530,7 @@ class MainWindow:
                                 newlines = [""]
                             wrapped_lines.extend(newlines)
 
-                        if len(wrapped_lines) >= 14:
+                        if (len(wrapped_lines)*blurb_pt) >= 14*18:
                             continue
 
                         for (i, line) in enumerate(wrapped_lines):
@@ -677,6 +736,7 @@ class MainWindow:
             'Scale': self.scale,
             'Orientation': self.orientation,
             'Not in Output': self.image_meta[self.current_file]['Not in Output'],
+            'Blurb': self.image_meta[self.current_file]['Blurb']
         }
 
         with open('input/images.csv', 'w') as csvfile:
@@ -745,10 +805,18 @@ class MainWindow:
             self.offset_y = 0
         elif event.keysym == 's':
             self.save()
+        elif event.keysym == 'n':
+            if self.image_meta[self.current_file]['Not in Output'] != 't':
+                self.image_meta[self.current_file]['Not in Output'] = 't'
+            else:
+                self.image_meta[self.current_file]['Not in Output'] = 'f'
+            self.load_img(self.current_file)
         elif event.keysym == 'a':
             for (k,imeta) in self.image_meta.items():
-                self.load_img(k, show_table=False)
-                self.draw_img()
+                if imeta['Not in Output'] != 't':
+                    self.load_img(k, show_table=False)
+                    self.draw_img()
+            self.save()
         elif event.keysym == 'Next':
             self.save()
             keys = list(self.image_meta.keys())
