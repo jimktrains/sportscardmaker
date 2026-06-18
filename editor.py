@@ -20,6 +20,7 @@ def is_image(filename):
 class MainWindow:
     def __init__(self):
         self.load_config()
+        self.last_cmd = None
 
         self.key_actions = [
         ]
@@ -626,7 +627,7 @@ class MainWindow:
 
                 fbimg.convert('RGB').save('output/' + f"{self.jnum}_{idx:02}_front_back.png")
                 self.back_img.convert('RGB').save('output/' + f"{self.jnum}_{idx:02}_back.png")
-                self.img.save('output/' + f"{self.jnum}_{idx:02}_{self.orientation}_front.png")
+                self.img.save('output/' + f"{self.jnum}_{idx:02}_front.png")
 
         self.img = self.img.resize((self.cwidth, self.cheight))
         self.back_img = self.back_img.resize((self.back_cwidth, self.back_cheight))
@@ -693,7 +694,7 @@ class MainWindow:
                         if jnum.isdigit():
                             jnum = f"0{jnum}"
                         else:
-                            jnum = f"Z{jnum}"
+                            jnum = f"{jnum}A"
                     return jnum
                 return ""
 
@@ -812,6 +813,10 @@ class MainWindow:
             self.offset_y = 0
         elif event.keysym == 's':
             self.save()
+        elif event.keysym == 'N':
+            self.cmd_box.delete("1.0", END)
+            self.cmd_box.insert(END, self.last_cmd)
+            self.process_cmd(event)
         elif event.keysym == 'n':
             if self.image_meta[self.current_file]['Not in Output'] != 't':
                 self.image_meta[self.current_file]['Not in Output'] = 't'
@@ -875,6 +880,7 @@ class MainWindow:
         self.draw_img()
 
     def process_cmd(self, event):
+        self.last_cmd = self.cmd_box.get("1.0",END).strip()
         parts = self.cmd_box.get("1.0",END).strip().split(" ")
         parts = list(filter(lambda x:len(x) != 0, parts))
 
