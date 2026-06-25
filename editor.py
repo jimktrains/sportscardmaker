@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!./venv/bin/python3
 
 from configparser import ConfigParser
 from tkinter import *
@@ -9,6 +9,7 @@ import sys
 import textwrap
 import subprocess
 import shutil
+import argparse
 
 HEIGHT_IDX = 1
 WIDTH_IDX = 0
@@ -81,7 +82,9 @@ class Picture:
 
 
 class MainWindow:
-    def __init__(self):
+    def __init__(self, projectpath):
+        self.projectpath = projectpath
+
         self.load_config()
         self.last_cmd = None
 
@@ -211,12 +214,7 @@ class MainWindow:
 
     def load_config(self):
         self.config = ConfigParser()
-        self.config.read_file(open('input/settings.ini'))
-        print("===config===")
-        for s in self.config.sections():
-            for (i,v) in self.config.items(s):
-                print(f"{s}/{i} = {v}")
-        print("=====")
+        self.config.read_file(open(f'{self.projectpath}/input/settings.ini'))
 
         self.blurb_pt = self.config.getint('default', 'blurb_pt')
         self.font_blurb = ImageFont.truetype(self.config.get('default', 'blurb_font'), self.blurb_pt)
@@ -236,9 +234,9 @@ class MainWindow:
         self.lname_pt = self.config.getint('default', 'lname_pt')
         self.font_lname = ImageFont.truetype(self.config.get('default', 'jnum_font'), self.lname_pt)
 
-        self.vertical_template = Image.open('input/' + self.config.get('default', 'template_vertical'))
-        self.horizontal_template = Image.open('input/' + self.config.get('default', 'template_horizontal'))
-        self.template_back = Image.open('input/' + self.config.get('default', 'template_back'))
+        self.vertical_template = Image.open(f'{self.projectpath}/input/' + self.config.get('default', 'template_vertical'))
+        self.horizontal_template = Image.open(f'{self.projectpath}/input/' + self.config.get('default', 'template_horizontal'))
+        self.template_back = Image.open(f'{self.projectpath}/input/' + self.config.get('default', 'template_back'))
 
         self.jnum_pos = {
                 'v': (self.config.getint('default', 'jnum_pos_v_x'), self.config.getint('default', 'jnum_pos_v_y')),
@@ -253,20 +251,20 @@ class MainWindow:
                 'h': (self.config.getint('default', 'fname_pos_h_x'), self.config.getint('default', 'fname_pos_h_y')),
         }
 
-        self.images = [f for f in os.listdir('input') if is_image('input/'+f)]
+        self.images = [f for f in os.listdir(f'{self.projectpath}/input') if is_image(f'{self.projectpath}/input/'+f)]
 
         self.roster = {}
-        with open('input/roster.csv') as csvfile:
+        with open(f'{self.projectpath}/input/roster.csv') as csvfile:
             reader = DictReader(csvfile)
             self.roster = {row['Id']: row for row in reader}
 
         self.jokes = []
-        with open('input/jokes.csv') as csvfile:
+        with open(f'{self.projectpath}/input/jokes.csv') as csvfile:
             reader = DictReader(csvfile)
             self.jokes = [row for row in reader]
 
         self.image_meta = {}
-        with open('input/images.csv') as csvfile:
+        with open(f'{self.projectpath}/input/images.csv') as csvfile:
             reader = DictReader(csvfile)
             self.image_meta = {row['Image']: row for row in reader}
         if len(self.image_meta) > 0:
@@ -375,7 +373,7 @@ class MainWindow:
         self.index_label.config(text=f"?/{len(self.image_meta)-1}")
 
         if self.current_file not in self.image_meta:
-            print(f"{self.current_file} not in input/images.cv")
+            print(f"{self.current_file} not in {self.projectpath}/input/images.cv")
             return
         imeta = self.image_meta[self.current_file]
 
@@ -387,14 +385,14 @@ class MainWindow:
 
         #print(f"{imeta=}")
         if imeta['Player Id'] is not None and imeta['Player Id'] not in self.roster:
-            print(f"image {self.current_file} has player id {imeta['Player Id']}, but that is not in input/roster.csv")
+            print(f"image {self.current_file} has player id {imeta['Player Id']}, but that is not in {self.projectpath}/input/roster.csv")
             return
         nio = ""
         if self.image_meta[self.current_file]['Not in Output'] != 'f':
             nio = "Not in Output"
         self.not_in_output_label.config(text=nio)
 
-        self.oimg = Image.open('input/' + self.current_file)
+        self.oimg = Image.open(f'{self.projectpath}/input/{self.current_file}')
         self.orientation = imeta['Orientation']
         self.scale = float(imeta['Scale'])
         if self.scale < 0.1:
@@ -709,7 +707,7 @@ class MainWindow:
             self.back_canvas.itemconfig(self.back_cimg, image=self.back_pimg)
 
     def write_index(self):
-        index_filename = "output/index.html"
+        index_filename = f"{self.projectpath}/output/index.html"
         tmp_index_filename = f"{index_filename}~"
         with open(tmp_index_filename, "w+") as f:
             f.write("<html>\n")
@@ -799,13 +797,13 @@ class MainWindow:
             meta = self.image_meta[self.current_file]
             if meta['Not in Output'] == 'f':
                 self.draw_img(True)
-                prefix = f"output"
+                prefix = f"{self.projectpath}/output"
                 self.fbimg.convert('RGBA').save(f"{prefix}/{idjn}_front_back.png")
                 self.back_img.convert('RGB').save(f"{prefix}/{idjn}_back.png")
                 self.img.save(f"{prefix}/{idjn}_front.png")
 
                 self.draw_img(False)
-                prefix = f"output/final"
+                prefix = f"{self.projectpath}/output/final"
                 self.back_img.convert('RGB').save(f"{prefix}/back/{idjn}.png")
                 self.img.save(f"{prefix}/front/{idjn}.png")
 
@@ -825,7 +823,7 @@ class MainWindow:
             'Blurb': self.image_meta[self.current_file]['Blurb'],
         }
 
-        images_csv_filename = 'input/images.csv'
+        images_csv_filename = f'{self.projectpath}/input/images.csv'
         tmp_images_csv_filename = f"{images_csv_filename}~"
 
         files = sorted(enumerate(self.image_meta.items()), key=sortfileskey)
@@ -963,7 +961,7 @@ class MainWindow:
             print("rotate")
             self.oimg = self.oimg.rotate(90)
             print(f"writing to {self.current_file}")
-            self.oimg.save('input/' + self.current_file)
+            self.oimg.save(f'{self.projectpath}/input/{self.current_file}')
             self.load_img(self.current_file)
         elif event.keysym == 'numbersign':
             self.cmd_box.delete("1.0", END)
@@ -974,7 +972,7 @@ class MainWindow:
             self.cmd_box.insert(END, "jnum ")
             self.cmd_box.focus()
         elif event.keysym == 'e':
-            subprocess.run(['rawtherapee', f"input/{self.current_file}"])
+            subprocess.run(['rawtherapee', f"{self.projectpath}/input/{self.current_file}"])
         else:
             print(f"keyrelease {self.shift_flag=} {event.char=} {event.keysym=} {event.keycode=}")
         self.draw_img()
@@ -1018,5 +1016,9 @@ class MainWindow:
         self.cmd_box.delete("1.0", END)
         self.root.focus()
 
-mainwindow = MainWindow()
+parser = argparse.ArgumentParser()
+parser.add_argument('projectpath')
+args = parser.parse_args()
+
+mainwindow = MainWindow(args.projectpath)
 mainwindow.root.mainloop()
