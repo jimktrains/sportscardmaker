@@ -17,7 +17,7 @@ def is_image(filename):
     return os.path.isfile(filename) and filename.lower().endswith(".jpg")
 
 def sortfileskey(x):
-    jnum = x[1][1]['Jersey Number'] or ""
+    jnum = x[1][1]['Player Id'] or ""
     if len(jnum) == 1:
         if jnum.isdigit():
             jnum = f"0{jnum}"
@@ -39,6 +39,7 @@ def sortfileskey(x):
 
 class RosterEntry:
     def __init__(self, row):
+        self.id = row['Id'] or None
         self.jersey_number = row['Jersey Number'] or None
         self.first_name = row['First Name'] or None
         self.last_name = row['Last Name'] or None
@@ -57,7 +58,7 @@ class Picture:
         if type(filename_or_row) == dict:
             r = filename_or_row
             self.image = r['Image']
-            self.jersey_number = r['Jersey Number'] or None
+            self.player_id = r['Player Id'] or None
             self.x_offset = r['X Offset'] or 0.0
             self.y_offset = r['Y Offset'] or 0.0
             self.scale = r['Scale'] or 1.0
@@ -257,7 +258,7 @@ class MainWindow:
         self.roster = {}
         with open('input/roster.csv') as csvfile:
             reader = DictReader(csvfile)
-            self.roster = {row['Jersey Number']: row for row in reader}
+            self.roster = {row['Id']: row for row in reader}
 
         self.jokes = []
         with open('input/jokes.csv') as csvfile:
@@ -295,7 +296,7 @@ class MainWindow:
             if filename not in self.image_meta:
                 self.image_meta[filename] = {
                     'Image': filename,
-                    'Jersey Number': None,
+                    'Player Id': None,
                     'X Offset': None,
                     'Y Offset': None,
                     'Scale': 1,
@@ -305,7 +306,7 @@ class MainWindow:
                     'Blurb': None,
                 }
         for k in self.image_meta:
-            self.image_meta[k]['Jersey Number'] = self.image_meta[k]['Jersey Number'] or None
+            self.image_meta[k]['Player Id'] = self.image_meta[k]['Player Id'] or None
             self.image_meta[k]['X Offset'] = self.image_meta[k]['X Offset'] or None
             self.image_meta[k]['Y Offset'] = self.image_meta[k]['Y Offset'] or None
             self.image_meta[k]['Not in Output'] = self.image_meta[k]['Not in Output'] or 'f' 
@@ -331,13 +332,17 @@ class MainWindow:
             counts[jnum]={'Head': 0,
                           'Batting': 0,
                           'Fielding': 0,
+                          'Other': 0,
                           't': 0,
                           }
             for (k,v) in self.image_meta.items():
                 if v['Not in Output'] != 'f':
                     continue
-                if v['Jersey Number'] == jnum:
-                    counts[jnum][v['Kind']] += 1
+                if v['Player Id'] == jnum:
+                    k = 'Other'
+                    if v['Kind'] in counts[jnum]:
+                        k = v['Kind']
+                    counts[jnum][k] += 1
                     counts[jnum]['t'] += 1
                     count += 1
 
@@ -356,7 +361,9 @@ class MainWindow:
         for (jnum, v) in self.roster.items():
             fname = v['First Name'].ljust(longest_fname)
             lname = v['Last Name'].ljust(longest_lname)
-            print(f"{jnum:2} | {fname} | {lname} | {counts[jnum]['Head']} | {counts[jnum]['Batting']} | {counts[jnum]['Fielding']}  | {counts[jnum]['t']}")
+            print(f"{jnum:3} | {fname} | {lname} | {counts[jnum]['Head']} " + 
+                  f"| {counts[jnum]['Batting']} | {counts[jnum]['Fielding']} " +
+                  f"| {counts[jnum]['Other']} | {counts[jnum]['t']}")
         print(f"{count=}")
 
     def load_img(self, filename, show_table=True):
@@ -379,8 +386,8 @@ class MainWindow:
         self.kind_label.config(text=f"{imeta['Kind']}")
 
         #print(f"{imeta=}")
-        if imeta['Jersey Number'] is not None and imeta['Jersey Number'] not in self.roster:
-            print(f"image {self.current_file} has jersey number {imeta['Jersey Number']}, but that is not in input/roster.csv")
+        if imeta['Player Id'] is not None and imeta['Player Id'] not in self.roster:
+            print(f"image {self.current_file} has player id {imeta['Player Id']}, but that is not in input/roster.csv")
             return
         nio = ""
         if self.image_meta[self.current_file]['Not in Output'] != 'f':
@@ -417,7 +424,7 @@ class MainWindow:
         self.offset_y = int(float(self.offset_y))
 
 
-        self.jnum = imeta['Jersey Number']
+        self.jnum = imeta['Player Id']
 
         self.text_state = None
 
@@ -489,15 +496,16 @@ class MainWindow:
 
             font = self.font_jnum
             ysize = self.jnum_pt
-            lines = [self.jnum]
-            if self.jnum in ['T', 'T2']:
-                lines = []
 
             if self.jnum not in self.roster:
                 print(f"{self.jnum} not in roster")
             else:
-                if self.roster[self.jnum]['Position'] != '':
-                    lines = self.roster[self.jnum]['Position'].split(' ')
+                player = self.roster[self.jnum]
+                lines = [player['Jersey Number']]
+                if self.jnum in ['T', 'T2']:
+                    lines = []
+                if player['Position'] != '':
+                    lines = player['Position'].split(' ')
                     font = self.font_fname
                     ysize = self.fname_pt
                 for (i,jnum) in enumerate(lines):
@@ -505,21 +513,21 @@ class MainWindow:
                     jnum_width = self.dimg.textlength(jnum, font=font)
                     jnum_x -= jnum_width
                     self.dimg.text((jnum_x, self.jnum_pos[self.orientation][1] + ((i)*ysize)), jnum, fill=text_color, font=font)
-                fname = self.roster[self.jnum]['First Name']
-                lname = self.roster[self.jnum]['Last Name'].upper()
+                fname = player['First Name']
+                lname = player['Last Name'].upper()
                 self.dimg.text(self.fname_pos[self.orientation], fname, fill=text_color, font=self.font_fname)
                 self.dimg.text(self.lname_pos[self.orientation], lname, fill=text_color, font=self.font_lname)
 
-                if self.jnum.isdigit():
+                if player['Jersey Number'].isdigit():
                     jnum_x=196
                     jnum_width = self.dimg.textlength(self.jnum, font=self.font_jnum)
                     jnum_x -= jnum_width/2
-                    self.back_dimg.text((jnum_x, 152), self.jnum, fill=(0,0,0), font=self.font_jnum)
+                    self.back_dimg.text((jnum_x, 152), player['Jersey Number'], fill=(0,0,0), font=self.font_jnum)
 
                 self.back_dimg.text((330,60), fname, fill=(0,0,0), font=self.font_fname)
                 self.back_dimg.text((330,95), lname, fill=(0,0,0), font=self.font_lname)
                 
-                r = self.roster[self.jnum]
+                r = player
                 if r['Position'] is not None and r['Position'] != '':
                     self.back_dimg.text((335,173), f"{r['Position']}", fill=(0,0,0), font=self.font_stats)
                 elif r['School'] is not None and r['School'] != '':
@@ -555,7 +563,7 @@ class MainWindow:
                                     longest_name_len = n
 
                                 p = self.roster[jn]['Position']
-                                pn = len(jn)
+                                pn = len(self.roster[jn]['Jersey Number'])
                                 if p != "" and p is not None:
                                     pn = len(p)
                                 if pn > longest_p_len:
@@ -566,15 +574,16 @@ class MainWindow:
                                 n = f"{self.roster[jn]['First Name']} {self.roster[jn]['Last Name']}".strip()
                                 n = n.ljust(longest_name_len)
 
+                                jn_txt = self.roster[jn]['Jersey Number'].rjust(longest_p_len)
                                 p = self.roster[jn]['Position']
                                 if p != "" and p is not None:
-                                    jn = p
-                                jn = jn.rjust(longest_p_len)
-                                np = f"{n} {jn}"
+                                    jn_txt = p
+                                np = f"{n} {jn_txt}"
                                 blurb.append(np)
                                 if len(np) > longest_np_len:
                                     longest_np_len = len(np)
                         blurb2 = []
+                        print("\n".join(blurb))
                         for i in range(0,len(blurb),2):
                             t = ""
                             if i + 1 != len(blurb):
@@ -753,7 +762,7 @@ class MainWindow:
             files = sorted(enumerate(self.image_meta.items()), key=sortfileskey)
             byjersey = {}
             for (i, (iname, meta)) in files:
-                jnum = meta['Jersey Number']
+                jnum = meta['Player Id']
                 if jnum not in byjersey:
                     byjersey[jnum] = []
                 byjersey[jnum].append((i, iname))
@@ -766,8 +775,8 @@ class MainWindow:
                     # print(f"{jnum=} {i=} {biname=}")
                     meta = self.image_meta[biname]
                     if meta['Not in Output'] == 'f':
-                        iname = f"{i:02}_{meta['Jersey Number']}_front_back.png"
-                        f.write(f"<small>{i} {biname} {meta['Jersey Number']}</small>")
+                        iname = f"{i:02}_{meta['Player Id']}_front_back.png"
+                        f.write(f"<small>{i} {biname} {meta['Player Id']}</small>")
                         f.write(f"<a href=\"{iname}\">")
                         f.write(f"<img src=\"{iname}\">")
                         f.write("</a>\n")
@@ -806,7 +815,7 @@ class MainWindow:
 
         self.image_meta[self.current_file] = {
             'Image': self.current_file,
-            'Jersey Number': self.jnum,
+            'Player Id': self.jnum,
             'Kind': self.image_meta[self.current_file]['Kind'],
             'X Offset': self.offset_x,
             'Y Offset': self.offset_y,
@@ -990,13 +999,13 @@ class MainWindow:
                     found_fn = None
                     for fn in filelist[fidx:]:
                         meta = self.image_meta[fn]
-                        if meta['Jersey Number'] == parts[1]:
+                        if meta['Player Id'] == parts[1]:
                             found_fn = fn
                             break
                     if found_fn is None:
                         for fn in filelist[0:fidx]:
                             meta = self.image_meta[fn]
-                            if meta['Jersey Number'] == parts[1]:
+                            if meta['Player Id'] == parts[1]:
                                 found_fn = fn
                                 break
                     if found_fn is None:
